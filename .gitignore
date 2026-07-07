@@ -1,0 +1,19 @@
+# ---- PlatformIO / build ----
+.pio/
+.vscode/
+*.bin
+*.elf
+
+# ---- .NET (companion app) ----
+[Bb]in/
+[Oo]bj/
+publish/
+*.user
+
+# ---- runtime / logs ----
+knobconfig.log
+
+# ---- OS ----
+Thumbs.db
+.DS_Store
+desktop.ini

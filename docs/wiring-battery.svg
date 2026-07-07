@@ -1,0 +1,216 @@
+<svg viewBox="0 0 1120 900" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" role="img" aria-labelledby="title desc">
+  <title id="title">XIAO ESP32-C3 Volume Knob — battery + boost converter wiring</title>
+  <desc id="desc">Battery-powered wiring: a 3.7V LiPo feeds the XIAO BAT pads and a 3.7V-to-5V boost converter that powers the WS2812 ring. Colour-coded wires and a common ground.</desc>
+
+  <rect x="0" y="0" width="1120" height="900" fill="#f7f8fa"/>
+  <text x="40" y="44" font-size="26" font-weight="700" fill="#1b2733">XIAO Volume Knob — battery + boost wiring</text>
+  <text x="40" y="70" font-size="15" fill="#5a6672">3.7 V LiPo powers the XIAO; a 3.7 V&#8594;5 V boost converter powers the WS2812 ring</text>
+
+  <!-- =========================== WIRES (under components) =========================== -->
+  <!-- GND BUS -->
+  <line x1="110" y1="580" x2="985" y2="580" stroke="#212529" stroke-width="7" stroke-linecap="round"/>
+  <text x="120" y="602" font-size="12" font-weight="700" fill="#212529">GND (common)</text>
+
+  <g fill="none" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
+    <!-- encoder signals -->
+    <polyline points="262,285 360,285 360,385 418,385" stroke="#2f9e44"/>
+    <polyline points="262,365 350,365 350,420 418,420" stroke="#1971c2"/>
+    <polyline points="262,405 340,405 340,455 418,455" stroke="#f08c00"/>
+
+    <!-- encoder commons -> bus -->
+    <polyline points="262,325 290,325 290,580" stroke="#212529"/>
+    <polyline points="262,445 290,445 290,580" stroke="#212529"/>
+
+    <!-- XIAO GND + BAT- -> bus -->
+    <polyline points="622,280 660,280 660,580" stroke="#212529"/>
+    <polyline points="565,480 565,580" stroke="#212529"/>
+
+    <!-- data: D10 -> 330R -> ring DIN -->
+    <polyline points="622,350 700,350" stroke="#ae3ec9"/>
+    <polyline points="732,350 732,500 878,500 878,414" stroke="#ae3ec9"/>
+
+    <!-- battery + -> boost VIN+ , and branch up to XIAO BAT+ -->
+    <polyline points="270,675 430,675" stroke="#f76707" stroke-width="6"/>
+    <polyline points="350,675 350,520 475,520 475,480" stroke="#f76707" stroke-width="6"/>
+
+    <!-- battery - -> boost VIN- , and up to bus -->
+    <polyline points="270,725 430,725" stroke="#212529" stroke-width="6"/>
+    <polyline points="270,725 270,580" stroke="#212529" stroke-width="6"/>
+    <!-- boost VOUT- -> bus -->
+    <polyline points="620,720 645,720 645,580" stroke="#212529" stroke-width="6"/>
+
+    <!-- boost 5V out -> ring 5V -->
+    <polyline points="620,675 675,675 675,455 838,455 838,414" stroke="#e03131" stroke-width="6"/>
+
+    <!-- ring GND -> bus -->
+    <polyline points="918,414 918,580" stroke="#212529"/>
+  </g>
+
+  <!-- 330 ohm resistor on data -->
+  <polyline points="700,350 706,340 714,360 722,340 728,360 732,350" fill="none" stroke="#ae3ec9" stroke-width="4.5" stroke-linejoin="round"/>
+  <text x="716" y="330" font-size="12" fill="#5a6672" text-anchor="middle">330 &#937;</text>
+
+  <!-- solder junctions -->
+  <g fill="#212529">
+    <circle cx="290" cy="580" r="6"/>
+    <circle cx="660" cy="580" r="6"/>
+    <circle cx="565" cy="580" r="6"/>
+    <circle cx="270" cy="580" r="6"/>
+    <circle cx="645" cy="580" r="6"/>
+    <circle cx="918" cy="580" r="6"/>
+    <circle cx="350" cy="675" r="6" fill="#f76707"/>
+    <circle cx="270" cy="725" r="6"/>
+  </g>
+
+  <!-- =========================== XIAO BOARD =========================== -->
+  <g>
+    <rect x="430" y="210" width="180" height="270" rx="12" fill="#20303d" stroke="#0e1a22" stroke-width="2"/>
+    <rect x="496" y="192" width="48" height="24" rx="7" fill="#c7ccd1" stroke="#8b9299" stroke-width="2"/>
+    <text x="520" y="209" font-size="10" fill="#3a4148" text-anchor="middle" font-weight="600">USB-C</text>
+    <text x="520" y="240" font-size="11" fill="#8fa0ad" text-anchor="middle">ESP32-C3 &#183; BLE</text>
+    <text x="520" y="345" font-size="13" fill="#9fb0bd" text-anchor="middle" font-weight="600">XIAO</text>
+    <text x="520" y="362" font-size="13" fill="#9fb0bd" text-anchor="middle" font-weight="600">ESP32-C3</text>
+
+    <!-- left pads -->
+    <g fill="#e6b800">
+      <rect x="418" y="239" width="12" height="12"/><rect x="418" y="274" width="12" height="12"/>
+      <rect x="418" y="309" width="12" height="12"/><rect x="418" y="344" width="12" height="12"/>
+      <rect x="418" y="379" width="12" height="12"/><rect x="418" y="414" width="12" height="12"/>
+      <rect x="418" y="449" width="12" height="12"/>
+    </g>
+    <g font-size="12.5" font-weight="600" text-anchor="start" fill="#cfd8df">
+      <text x="440" y="250">D0</text><text x="440" y="285">D1</text><text x="440" y="320">D2</text><text x="440" y="355">D3</text>
+      <text x="440" y="390" fill="#7fe39a">D4</text><text x="440" y="425" fill="#7fb8e6">D5</text><text x="440" y="460" fill="#ffcf80">D6</text>
+    </g>
+    <g font-size="9.5" font-weight="400" text-anchor="start" fill="#6d7d8a">
+      <text x="440" y="401">GPIO6</text><text x="440" y="436">GPIO7</text><text x="440" y="471">GPIO21</text>
+    </g>
+
+    <!-- right pads -->
+    <g fill="#e6b800">
+      <rect x="610" y="239" width="12" height="12"/><rect x="610" y="274" width="12" height="12"/>
+      <rect x="610" y="309" width="12" height="12"/><rect x="610" y="344" width="12" height="12"/>
+      <rect x="610" y="379" width="12" height="12"/><rect x="610" y="414" width="12" height="12"/>
+      <rect x="610" y="449" width="12" height="12"/>
+    </g>
+    <g font-size="12.5" font-weight="600" text-anchor="end" fill="#cfd8df">
+      <text x="606" y="250" fill="#8f9aa3">5V</text>
+      <text x="606" y="285">GND</text><text x="606" y="320">3V3</text>
+      <text x="606" y="355" fill="#e6a8f0">D10</text>
+      <text x="606" y="390">D9</text><text x="606" y="425">D8</text><text x="606" y="460">D7</text>
+    </g>
+    <text x="606" y="262" font-size="8.5" fill="#6d7d8a" text-anchor="end">(unused on batt)</text>
+
+    <!-- underside BAT pads -->
+    <g>
+      <rect x="465" y="468" width="20" height="14" rx="2" fill="#33404a" stroke="#f76707" stroke-width="1.6" stroke-dasharray="3 2"/>
+      <rect x="555" y="468" width="20" height="14" rx="2" fill="#33404a" stroke="#adb5bd" stroke-width="1.6" stroke-dasharray="3 2"/>
+    </g>
+    <text x="475" y="503" font-size="11" font-weight="700" fill="#f76707" text-anchor="middle">BAT+</text>
+    <text x="565" y="503" font-size="11" font-weight="700" fill="#8a929a" text-anchor="middle">BAT&#8722;</text>
+    <text x="520" y="518" font-size="9.5" fill="#8a929a" text-anchor="middle">(pads on underside of board)</text>
+  </g>
+
+  <!-- =========================== ROTARY ENCODER =========================== -->
+  <g>
+    <rect x="60" y="250" width="200" height="200" rx="10" fill="#c7ccd1" stroke="#8b9299" stroke-width="2"/>
+    <circle cx="150" cy="350" r="54" fill="#3a4148" stroke="#22282d" stroke-width="3"/>
+    <circle cx="150" cy="350" r="28" fill="#4c555d"/>
+    <rect x="144" y="310" width="12" height="28" rx="4" fill="#20262b"/>
+    <text x="150" y="242" font-size="13" fill="#3a4148" text-anchor="middle" font-weight="700">Rotary encoder</text>
+    <text x="150" y="468" font-size="10.5" fill="#5a6672" text-anchor="middle">16 mm 24 P/R + push switch</text>
+    <g fill="#8b9299">
+      <rect x="250" y="279" width="12" height="12"/><rect x="250" y="319" width="12" height="12"/>
+      <rect x="250" y="359" width="12" height="12"/><rect x="250" y="399" width="12" height="12"/>
+      <rect x="250" y="439" width="12" height="12"/>
+    </g>
+    <g font-size="12" font-weight="700" text-anchor="end">
+      <text x="246" y="290" fill="#2f9e44">A</text>
+      <text x="246" y="330" fill="#495057">C (com)</text>
+      <text x="246" y="370" fill="#1971c2">B</text>
+      <text x="246" y="410" fill="#e8930a">SW</text>
+      <text x="246" y="450" fill="#495057">SW (com)</text>
+    </g>
+  </g>
+
+  <!-- =========================== WS2812 RING =========================== -->
+  <g>
+    <circle cx="875" cy="300" r="80" fill="#1b2733" stroke="#0e1a22" stroke-width="2"/>
+    <circle cx="875" cy="300" r="48" fill="#f7f8fa"/>
+    <text x="875" y="296" font-size="13" fill="#5a6672" text-anchor="middle" font-weight="700">WS2812</text>
+    <text x="875" y="313" font-size="11" fill="#5a6672" text-anchor="middle">ring &#215;12</text>
+    <g stroke="#d4dae0" stroke-width="1">
+      <rect x="939" y="292" width="16" height="16" rx="2" fill="#ff5c5c"/>
+      <rect x="929" y="328" width="16" height="16" rx="2" fill="#ff9f43"/>
+      <rect x="903" y="354" width="16" height="16" rx="2" fill="#ffe14d"/>
+      <rect x="867" y="364" width="16" height="16" rx="2" fill="#7bed9f"/>
+      <rect x="831" y="354" width="16" height="16" rx="2" fill="#2ed573"/>
+      <rect x="805" y="328" width="16" height="16" rx="2" fill="#22d3d3"/>
+      <rect x="795" y="292" width="16" height="16" rx="2" fill="#1e90ff"/>
+      <rect x="805" y="256" width="16" height="16" rx="2" fill="#5f6bff"/>
+      <rect x="831" y="230" width="16" height="16" rx="2" fill="#9c5cff"/>
+      <rect x="867" y="220" width="16" height="16" rx="2" fill="#e05cff"/>
+      <rect x="903" y="230" width="16" height="16" rx="2" fill="#ff5cc8"/>
+      <rect x="929" y="256" width="16" height="16" rx="2" fill="#ff5c8a"/>
+    </g>
+    <rect x="820" y="388" width="150" height="26" rx="4" fill="#2b3d4b"/>
+    <g fill="#e6b800">
+      <rect x="832" y="390" width="12" height="12"/><rect x="872" y="390" width="12" height="12"/>
+      <rect x="912" y="390" width="12" height="12"/><rect x="952" y="390" width="12" height="12"/>
+    </g>
+    <g font-size="10.5" font-weight="700" text-anchor="middle">
+      <text x="838" y="432" fill="#e03131">5V</text>
+      <text x="878" y="432" fill="#ae3ec9">DIN</text>
+      <text x="918" y="432" fill="#495057">GND</text>
+      <text x="958" y="432" fill="#9aa7b2">DOUT</text>
+    </g>
+    <text x="958" y="446" font-size="9" fill="#9aa7b2" text-anchor="middle">(n/c)</text>
+  </g>
+
+  <!-- =========================== BOOST CONVERTER =========================== -->
+  <g>
+    <rect x="430" y="640" width="190" height="110" rx="10" fill="#0f5132" stroke="#0a3622" stroke-width="2"/>
+    <text x="525" y="686" font-size="14" fill="#d1f0dd" text-anchor="middle" font-weight="700">Boost converter</text>
+    <text x="525" y="708" font-size="13" fill="#9bd8b4" text-anchor="middle">3.7 V &#8594; 5 V</text>
+    <g fill="#e6b800">
+      <rect x="424" y="669" width="12" height="12"/><rect x="424" y="714" width="12" height="12"/>
+      <rect x="614" y="669" width="12" height="12"/><rect x="614" y="714" width="12" height="12"/>
+    </g>
+    <g font-size="11" font-weight="700">
+      <text x="442" y="679" fill="#ffd7b0" text-anchor="start">VIN+</text>
+      <text x="442" y="724" fill="#c9d1d8" text-anchor="start">VIN&#8722;</text>
+      <text x="608" y="679" fill="#ffb3b3" text-anchor="end">5V OUT</text>
+      <text x="608" y="724" fill="#c9d1d8" text-anchor="end">GND</text>
+    </g>
+  </g>
+
+  <!-- =========================== BATTERY =========================== -->
+  <g>
+    <rect x="70" y="640" width="200" height="120" rx="10" fill="#37507a" stroke="#22324f" stroke-width="2"/>
+    <rect x="70" y="640" width="200" height="26" rx="10" fill="#2b3f60"/>
+    <text x="170" y="700" font-size="15" fill="#dbe4f3" text-anchor="middle" font-weight="700">LiPo 3.7 V</text>
+    <text x="170" y="722" font-size="11.5" fill="#aebbd4" text-anchor="middle">measured 3.9 V</text>
+    <!-- terminals -->
+    <rect x="264" y="669" width="12" height="12" fill="#f76707"/>
+    <rect x="264" y="719" width="12" height="12" fill="#adb5bd"/>
+    <text x="258" y="679" font-size="13" font-weight="700" fill="#ffcf80" text-anchor="end">+</text>
+    <text x="258" y="730" font-size="14" font-weight="700" fill="#c9d1d8" text-anchor="end">&#8722;</text>
+  </g>
+
+  <!-- =========================== LEGEND =========================== -->
+  <g>
+    <rect x="655" y="628" width="425" height="150" rx="12" fill="#ffffff" stroke="#dde3e8" stroke-width="1.5"/>
+    <text x="675" y="656" font-size="15" font-weight="700" fill="#1b2733">Power path (what changed)</text>
+    <g font-size="12.5" fill="#33404a">
+      <rect x="675" y="672" width="22" height="6" rx="3" fill="#f76707"/>
+      <text x="708" y="679">Battery + &#8594; XIAO BAT+ and boost VIN+</text>
+      <rect x="675" y="696" width="22" height="6" rx="3" fill="#e03131"/>
+      <text x="708" y="703">Boost 5V OUT &#8594; ring 5V</text>
+      <rect x="675" y="720" width="22" height="6" rx="3" fill="#212529"/>
+      <text x="708" y="727">Common GND: battery&#8722;, boost, XIAO, ring, encoder</text>
+      <rect x="675" y="744" width="22" height="6" rx="3" fill="#ae3ec9"/>
+      <text x="708" y="751">Ring DIN &#8594; D10, via 330 &#937; (unchanged)</text>
+    </g>
+    <text x="675" y="770" font-size="10.5" fill="#8a929a">XIAO 5V pin is dead on battery &#8212; ring now runs off the boost. Crossings without a dot = no connection.</text>
+  </g>
+</svg>

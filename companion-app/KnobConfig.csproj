@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- The -windows10.0.19041.0 TFM projects the WinRT Bluetooth APIs; no extra
+         NuGet packages are needed for Windows.Devices.Bluetooth. -->
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>KnobConfig</AssemblyName>
+    <RootNamespace>KnobConfig</RootNamespace>
+    <ApplicationIcon>knob.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="knob.ico" />
+  </ItemGroup>
+
+</Project>
