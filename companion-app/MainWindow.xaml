@@ -43,6 +43,23 @@
           </StackPanel>
         </Border>
 
+        <!-- PC volume -->
+        <Border Style="{StaticResource Card}">
+          <StackPanel>
+            <TextBlock Text="PC VOLUME" Style="{StaticResource Section}"/>
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="40"/>
+              </Grid.ColumnDefinitions>
+              <ToggleButton x:Name="MuteBtn" Grid.Column="0" Content="&#128266;" Width="34" Height="30"
+                            Style="{StaticResource MuteToggle}" VerticalAlignment="Center"/>
+              <Slider Grid.Column="1" x:Name="VolumeSlider" Style="{StaticResource Slider}"
+                      Minimum="0" Maximum="100" Margin="12,0,0,0"/>
+              <TextBlock Grid.Column="2" x:Name="VolPct" Text="&#8212;" Style="{StaticResource ValLabel}"/>
+            </Grid>
+          </StackPanel>
+        </Border>
+
         <!-- LED ring -->
         <Border Style="{StaticResource Card}">
           <StackPanel>

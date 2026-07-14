@@ -18,7 +18,8 @@ configurable from the desktop app over the same Bluetooth link.
 - **Status on the ring** — solid red = muted · breathing blue = waiting to pair · red pulse = low battery
 - **Battery-saver** — the ring eases to a dim glow then blanks when idle, and wakes instantly on any turn/click
 - **On-board battery monitoring** — LiPo voltage via a divider, with an on-ring low-battery warning
-- **Windows companion app** — a modern WPF app to see live battery and change colour (HSV wheel), brightness, mode, motion speed and idle timers; **settings persist to the knob's flash**
+- **PC-aware sync** *(while the app runs)* — the ring mirrors the PC's real **mute** (solid red) and flashes teal/yellow on **play/pause**, kept in sync via the companion app
+- **Windows companion app** — a modern WPF app to see live battery, drive the **PC master volume + mute**, and change ring colour (HSV wheel), brightness, mode, motion speed and idle timers; **settings persist to the knob's flash**. Lives in the system tray, auto-starts with Windows
 
 ## Hardware
 
@@ -81,9 +82,10 @@ Custom service alongside the standard HID service:
 
 | Item | UUID | Access | Payload |
 |------|------|--------|---------|
-| Service | `5da10000-9f2b-4c7e-8a3d-2b6c1e4f7a90` | — | — |
-| Status  | `5da10001-…` | read / notify | `[u16 mV][u8 %][u8 flags]` |
-| Config  | `5da10002-…` | read / write  | 14-byte packed struct |
+| Service  | `5da10000-9f2b-4c7e-8a3d-2b6c1e4f7a90` | — | — |
+| Status   | `5da10001-…` | read / notify | `[u16 mV][u8 %][u8 flags]` |
+| Config   | `5da10002-…` | read / write  | 14-byte packed struct |
+| PC state | `5da10003-…` | write | `[u8 flags]` bit0 muted, bit1 playing, bit2 valid |
 
 `Config` = `{ u8 mode, u8 r,g,b, u8 brightness, u8 rainbowSpeed, u8 rainbowSpread, u16 idleDimS, u16 idleOffS, u16 lowBattMv, u8 breatheSpeed }` — persisted to NVS.
 

@@ -53,8 +53,8 @@
 #define LED_MAX_MA      250         // current cap so the ring can't brown-out USB / the radio
 CRGB leds[NUM_LEDS];
 
-static const CRGB COLOR_PLAY   = CRGB(0,   220, 40);   // green
-static const CRGB COLOR_PAUSE  = CRGB(255, 200, 0);    // yellow
+static const CRGB COLOR_PLAY   = CRGB(0,   200, 190);  // teal   (play / resumed)
+static const CRGB COLOR_PAUSE  = CRGB(255, 190, 0);    // yellow (paused)
 static const CRGB COLOR_WAIT   = CRGB(0,   60,  255);  // blue (no BLE link)
 static const CRGB COLOR_NEXT   = CRGB(0,   120, 255);  // cyan flash
 static const CRGB COLOR_PREV   = CRGB(160, 0,   255);  // purple flash
@@ -70,6 +70,8 @@ static const CRGB COLOR_MUTE   = CRGB(255, 0,   0);    // red (muted)
 #define FLICKER_MS         130      // per-click input-acknowledge flicker length
 #define RING_REST_LEVEL    125      // ring resting brightness; a click pops it to full
 #define FRAME_MS           4        // ~250 FPS render (smooth motion; dithering is off)
+#define PLAYSTATE_MS       3000     // play/pause indicator (teal/yellow) shows this long
+#define PLAYSTATE_FADE     900      // ...cross-fading back into the ring mode over this tail
 
 // ---- Battery saver ---------------------------------------------------------
 // With no turn/click, the ring eases to a dim glow, then blanks entirely so the
@@ -162,6 +164,11 @@ uint8_t  batteryPct  = 0;           // rough state-of-charge, %
 uint32_t lastBattMs  = 0;           // last battery sample time
 uint32_t batteryShowUntil = 0;      // ring shows the battery gauge until this time
 
+uint32_t playStateUntil = 0;        // teal/yellow play-pause indicator until this time
+CRGB     playColor      = CRGB::Black;
+uint8_t  lastPcPlaying  = 0xFF;     // last PC play state pushed by the app (0xFF = unknown)
+uint8_t  lastPcMuted    = 0xFF;     // last PC mute state
+
 // ===========================================================================
 //  Runtime config  -  tunable over BLE by the companion app, saved to flash.
 // ===========================================================================
@@ -208,9 +215,11 @@ void saveConfig() {
 #define SVC_UUID    "5da10000-9f2b-4c7e-8a3d-2b6c1e4f7a90"
 #define STATUS_UUID "5da10001-9f2b-4c7e-8a3d-2b6c1e4f7a90"
 #define CONFIG_UUID "5da10002-9f2b-4c7e-8a3d-2b6c1e4f7a90"
+#define PCSTATE_UUID "5da10003-9f2b-4c7e-8a3d-2b6c1e4f7a90"
 
-NimBLECharacteristic *statusChar = nullptr;
-NimBLECharacteristic *configChar = nullptr;
+NimBLECharacteristic *statusChar  = nullptr;
+NimBLECharacteristic *configChar  = nullptr;
+NimBLECharacteristic *pcStateChar = nullptr;
 
 void applyConfig() { FastLED.setBrightness(cfg.brightness); }
 
@@ -232,6 +241,32 @@ class ConfigCallbacks : public NimBLECharacteristicCallbacks {
 };
 ConfigCallbacks configCallbacks;
 
+// PC audio state pushed by the companion app while it runs: one byte of flags —
+// bit0 = master muted, bit1 = media playing, bit2 = valid (a media session exists).
+// Mirrors PC mute onto the ring (solid red), and flashes teal (play) / yellow
+// (pause) for PLAYSTATE_MS whenever the play state changes, then fades to the mode.
+class PcStateCallbacks : public NimBLECharacteristicCallbacks {
+  void onWrite(NimBLECharacteristic *c) override {
+    std::string v = c->getValue();
+    if (v.empty()) return;
+    uint8_t flags   = (uint8_t)v[0];
+    uint8_t muted   = flags & 0x01;
+    uint8_t playing = (flags >> 1) & 0x01;
+    uint8_t valid   = (flags >> 2) & 0x01;
+
+    isMuted = muted;                                     // mirror PC mute onto the ring
+    if (muted != lastPcMuted) { lastPcMuted = muted; lastActivityMs = millis(); }
+    if (valid && playing != lastPcPlaying) {             // play state changed -> transient
+      playColor      = playing ? COLOR_PLAY : COLOR_PAUSE;
+      playStateUntil = millis() + PLAYSTATE_MS;
+      lastPcPlaying  = playing;
+      lastActivityMs = millis();                         // wake the ring to show it
+    }
+    Serial.printf("PC state: muted=%u playing=%u valid=%u\n", muted, playing, valid);
+  }
+};
+PcStateCallbacks pcStateCallbacks;
+
 // Create the service on the server BEFORE bleKeyboard.begin() starts the stack,
 // so it lands in the GATT table alongside the HID service. Not advertised (a
 // 128-bit UUID would overflow the adv packet) — the app finds it after connect.
@@ -244,6 +279,9 @@ void setupConfigService() {
                  NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
   configChar->setCallbacks(&configCallbacks);
   configChar->setValue((uint8_t *)&cfg, sizeof(cfg));
+  pcStateChar = svc->createCharacteristic(PCSTATE_UUID,
+                 NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR);
+  pcStateChar->setCallbacks(&pcStateCallbacks);
   svc->start();
 }
 
@@ -453,6 +491,26 @@ void renderBreathe() {
   fill_solid(leds, NUM_LEDS, c);
 }
 
+// The configured idle look (rainbow / solid / breathing).
+void renderMode() {
+  switch (cfg.mode) {
+    case MODE_SOLID:   renderSolid();   break;
+    case MODE_BREATHE: renderBreathe(); break;
+    default:           renderRainbow(); break;
+  }
+}
+
+// Play/pause indicator: fills the ring with the play colour over the underlying
+// mode, then cross-fades back into the mode across the last PLAYSTATE_FADE ms.
+void renderPlayStateOver() {
+  renderMode();                                    // draw the mode underneath first
+  uint32_t now    = millis();
+  uint32_t remain = (playStateUntil > now) ? (playStateUntil - now) : 0;
+  uint8_t  a = 255;
+  if (remain < PLAYSTATE_FADE) a = (uint8_t)((uint32_t)remain * 255 / PLAYSTATE_FADE);
+  for (int i = 0; i < NUM_LEDS; i++) leds[i] = blend(leds[i], playColor, a);
+}
+
 void renderBatteryGauge() {
   // Filled arc proportional to charge: green (>50%), amber (>20%), red otherwise.
   // Shown on demand when the button is held BATT_HOLD_MS — see handleButton().
@@ -533,14 +591,12 @@ void render() {
     renderWaiting();                             // breathing blue: waiting to pair
   } else if (now < flashUntil) {
     fill_solid(leds, NUM_LEDS, flashColor);      // cyan/purple flash on next/prev
+  } else if (now < playStateUntil) {
+    renderPlayStateOver();                        // teal/yellow play-pause, fading to mode
   } else if (isMuted) {
-    fill_solid(leds, NUM_LEDS, COLOR_MUTE);      // solid red while muted
+    fill_solid(leds, NUM_LEDS, COLOR_MUTE);      // solid red while muted (synced from PC)
   } else {
-    switch (cfg.mode) {                          // configurable idle look
-      case MODE_SOLID:   renderSolid();   break;
-      case MODE_BREATHE: renderBreathe(); break;
-      default:           renderRainbow(); break;
-    }
+    renderMode();                                // configurable idle look
   }
 
   // Apply the idle dim over whatever was drawn. Scaling the pixel colours (not
@@ -599,9 +655,9 @@ void setup() {
   // so this runs exactly once, not on every boot.
   {
     prefs.begin("knob", false);
-    if (!prefs.getBool("bondwipe1", false)) {
+    if (!prefs.getBool("bondwipe2", false)) {
       NimBLEDevice::deleteAllBonds();
-      prefs.putBool("bondwipe1", true);
+      prefs.putBool("bondwipe2", true);
       Serial.println("Cleared stale BLE bonds (one-time) — re-pair in Windows.");
     }
     prefs.end();

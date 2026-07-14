@@ -2,10 +2,10 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <!-- The -windows10.0.19041.0 TFM projects the WinRT Bluetooth APIs; no extra
-         NuGet packages are needed for Windows.Devices.Bluetooth. -->
+    <!-- The -windows10.0.19041.0 TFM projects the WinRT Bluetooth + media-session APIs. -->
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>   <!-- for the system-tray NotifyIcon -->
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>disable</ImplicitUsings>
@@ -16,6 +16,10 @@
 
   <ItemGroup>
     <Resource Include="knob.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NAudio" Version="2.2.1" />
   </ItemGroup>
 
 </Project>

@@ -56,7 +56,9 @@ namespace KnobConfig
         static readonly Guid SVC    = new Guid("5da10000-9f2b-4c7e-8a3d-2b6c1e4f7a90");
         static readonly Guid STATUS = new Guid("5da10001-9f2b-4c7e-8a3d-2b6c1e4f7a90");
         static readonly Guid CONFIG = new Guid("5da10002-9f2b-4c7e-8a3d-2b6c1e4f7a90");
+        static readonly Guid PCSTATE = new Guid("5da10003-9f2b-4c7e-8a3d-2b6c1e4f7a90");
         const string DEVICE_NAME = "Eugene's Knob";
+        const string AUTOSTART_NAME = "VolumeKnob";
 
         static readonly string LogPath = System.IO.Path.Combine(AppContext.BaseDirectory, "knobconfig.log");
         static void Log(string s)
@@ -68,6 +70,18 @@ namespace KnobConfig
         BluetoothLEDevice? _device;
         GattCharacteristic? _statusChar;
         GattCharacteristic? _configChar;
+        GattCharacteristic? _pcStateChar;
+
+        // PC audio/media bridge
+        AudioMonitor? _audio;
+        MediaMonitor? _media;
+        System.Windows.Threading.DispatcherTimer? _pollTimer;
+        bool _suppressVol;
+        bool _pcMuted, _pcPlaying, _pcHasSession;
+
+        // tray / lifecycle
+        System.Windows.Forms.NotifyIcon? _tray;
+        bool _exiting;
 
         bool _loading;
         bool _connecting;
@@ -138,11 +152,162 @@ namespace KnobConfig
 
             BattTrack.SizeChanged += (_, __) => ApplyBatteryWidth();
 
-            ReconnectBtn.Click += async (_, __) => await ConnectWithRetryAsync();
-            Loaded += async (_, __) => await ConnectWithRetryAsync();
-            Closed += (_, __) => Cleanup();
+            // PC volume + mute
+            MuteBtn.Click += (_, __) => _audio?.ToggleMute();
+            VolumeSlider.ValueChanged += (_, __) =>
+            {
+                if (_suppressVol) return;
+                VolPct.Text = ((int)VolumeSlider.Value) + "%";
+                _audio?.SetVolume((int)VolumeSlider.Value);
+            };
 
+            ReconnectBtn.Click += async (_, __) => await ConnectWithRetryAsync();
+            Closing += MainWindow_Closing;
+
+            SetupTray();
+            RegisterAutostart(true);   // keep it starting with Windows by default
             UpdateSections();
+
+            // Kick off audio/media + BLE after construction. Posted (not Loaded) so it
+            // runs even when the app launches straight to the tray (window never shown).
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                StartAudioMedia();
+                _ = ConnectWithRetryAsync();
+            }), System.Windows.Threading.DispatcherPriority.Background);
+        }
+
+        // ---- window / tray lifecycle -----------------------------------------
+        void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
+        {
+            if (!_exiting) { e.Cancel = true; Hide(); }   // close button -> hide to tray
+        }
+
+        public void ShowFromTray()
+        {
+            Show();
+            WindowState = WindowState.Normal;
+            Activate();
+            Topmost = true; Topmost = false;   // bounce to the foreground
+        }
+
+        void SetupTray()
+        {
+            _tray = new System.Windows.Forms.NotifyIcon { Text = "Volume Knob", Visible = true };
+            try
+            {
+                var ico = System.IO.Path.Combine(AppContext.BaseDirectory, "knob.ico");
+                _tray.Icon = System.IO.File.Exists(ico)
+                    ? new System.Drawing.Icon(ico)
+                    : System.Drawing.SystemIcons.Application;
+            }
+            catch { _tray.Icon = System.Drawing.SystemIcons.Application; }
+            _tray.DoubleClick += (_, __) => ShowFromTray();
+
+            var menu = new System.Windows.Forms.ContextMenuStrip();
+            var open = new System.Windows.Forms.ToolStripMenuItem("Open");
+            open.Click += (_, __) => ShowFromTray();
+            var startup = new System.Windows.Forms.ToolStripMenuItem("Start with Windows")
+            { Checked = IsAutostart(), CheckOnClick = true };
+            startup.CheckedChanged += (_, __) => RegisterAutostart(startup.Checked);
+            var exit = new System.Windows.Forms.ToolStripMenuItem("Exit");
+            exit.Click += (_, __) => ExitApp();
+            menu.Items.Add(open);
+            menu.Items.Add(startup);
+            menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
+            menu.Items.Add(exit);
+            _tray.ContextMenuStrip = menu;
+        }
+
+        void ExitApp()
+        {
+            _exiting = true;
+            try { _pollTimer?.Stop(); } catch { }
+            try { _audio?.Dispose(); } catch { }
+            if (_tray != null) { _tray.Visible = false; _tray.Dispose(); _tray = null; }
+            Cleanup();
+            System.Windows.Application.Current.Shutdown();
+        }
+
+        // ---- run-at-login (HKCU Run) -----------------------------------------
+        static string ExePath()
+        {
+            try { return System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? ""; }
+            catch { return ""; }
+        }
+        static bool IsAutostart()
+        {
+            try
+            {
+                using var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                    @"Software\Microsoft\Windows\CurrentVersion\Run", false);
+                return k?.GetValue(AUTOSTART_NAME) != null;
+            }
+            catch { return false; }
+        }
+        static void RegisterAutostart(bool on)
+        {
+            try
+            {
+                using var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                    @"Software\Microsoft\Windows\CurrentVersion\Run", true);
+                if (k == null) return;
+                if (on) k.SetValue(AUTOSTART_NAME, "\"" + ExePath() + "\" --startup");
+                else k.DeleteValue(AUTOSTART_NAME, false);
+            }
+            catch { }
+        }
+
+        // ---- PC audio + media bridge -----------------------------------------
+        async void StartAudioMedia()
+        {
+            _audio = new AudioMonitor();
+            _audio.Changed += (v, m) => Dispatcher.BeginInvoke(new Action(() => OnAudio(v, m)));
+            var a = _audio.Get();
+            OnAudio(a.vol, a.muted);
+
+            _media = new MediaMonitor();
+            _media.Changed += (p, h) => Dispatcher.BeginInvoke(new Action(() => OnMedia(p, h)));
+            await _media.StartAsync();
+
+            _pollTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+            _pollTimer.Tick += (_, __) =>
+            {
+                if (_audio != null && _audio.RefreshDevice()) { var g = _audio.Get(); OnAudio(g.vol, g.muted); }
+                PushPcState();   // heartbeat: keeps the knob synced even if a write was lost
+            };
+            _pollTimer.Start();
+        }
+
+        void OnAudio(int vol, bool muted)
+        {
+            _suppressVol = true;
+            VolumeSlider.Value = Math.Max(0, Math.Min(100, vol));
+            _suppressVol = false;
+            VolPct.Text = vol + "%";
+            MuteBtn.IsChecked = muted;
+            MuteBtn.Content = muted ? "🔇" : "🔊";   // 🔇 / 🔊
+            _pcMuted = muted;
+            PushPcState();
+        }
+
+        void OnMedia(bool playing, bool has)
+        {
+            _pcPlaying = playing; _pcHasSession = has;
+            PushPcState();
+        }
+
+        async void PushPcState()
+        {
+            var ch = _pcStateChar;
+            if (ch == null) return;
+            byte flags = (byte)((_pcMuted ? 1 : 0) | (_pcPlaying ? 2 : 0) | (_pcHasSession ? 4 : 0));
+            try
+            {
+                var buf = CryptographicBuffer.CreateFromByteArray(new byte[] { flags });
+                await ch.WriteValueWithResultAsync(buf, GattWriteOption.WriteWithoutResponse);
+            }
+            catch (Exception ex) { Log("pcstate write: " + ex.Message); }
         }
 
         // dark title bar
@@ -414,6 +579,15 @@ namespace KnobConfig
                 _configChar = cres.Characteristics[0];
                 _statusChar = tres.Characteristics[0];
 
+                // PC-state characteristic is optional (older firmware won't have it).
+                try
+                {
+                    var pres = await svc.GetCharacteristicsForUuidAsync(PCSTATE, BluetoothCacheMode.Uncached);
+                    _pcStateChar = pres.Characteristics.Count > 0 ? pres.Characteristics[0] : null;
+                    Log("pcstate char present: " + (_pcStateChar != null));
+                }
+                catch (Exception ex) { _pcStateChar = null; Log("pcstate lookup: " + ex.Message); }
+
                 _statusChar.ValueChanged += OnStatusChanged;
                 await _statusChar.WriteClientCharacteristicConfigurationDescriptorAsync(
                     GattClientCharacteristicConfigurationDescriptorValue.Notify);
@@ -432,6 +606,11 @@ namespace KnobConfig
                     CryptographicBuffer.CopyToByteArray(sd.Value, out var sb);
                     if (sb.Length >= 3) ShowBattery((ushort)(sb[0] | (sb[1] << 8)), sb[2]);
                 }
+
+                // push the current PC audio/media state so the ring syncs immediately
+                if (_audio != null) { var a = _audio.Get(); _pcMuted = a.muted; }
+                if (_media != null) { var m = _media.Get(); _pcPlaying = m.playing; _pcHasSession = m.has; }
+                PushPcState();
 
                 SetStatus("Connected", CGood);
                 return true;
@@ -488,7 +667,7 @@ namespace KnobConfig
                 _device?.Dispose();
             }
             catch { }
-            _device = null; _statusChar = null; _configChar = null;
+            _device = null; _statusChar = null; _configChar = null; _pcStateChar = null;
         }
     }
 }
