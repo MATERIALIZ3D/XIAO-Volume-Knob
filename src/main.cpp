@@ -72,11 +72,11 @@ static const CRGB COLOR_MUTE   = CRGB(255, 0,   0);    // red (muted)
 #define FRAME_MS           4        // ~250 FPS render (smooth motion; dithering is off)
 #define PLAYSTATE_MS       3000     // play/pause indicator (teal/yellow) shows this long
 #define PLAYSTATE_FADE     900      // ...cross-fading back into the ring mode over this tail
-#define VOL100_SOLID_MS    10000    // volume-100 green holds full-bright this long
-#define VOL100_BLINK_HALF  180      // then blinks: on/off half-period
+#define VOL100_BLINK_HALF  180      // volume-100: first blinks (on/off half-period)
 #define VOL100_BLINK_MS    (VOL100_BLINK_HALF * 5)          // 3 green flashes (on,off,on,off,on)
+#define VOL100_SOLID_MS    3000     // then holds solid full-bright green this long
 #define VOL100_FADE_MS     800      // then fades into the ring mode
-#define VOL100_TOTAL_MS    (VOL100_SOLID_MS + VOL100_BLINK_MS + VOL100_FADE_MS)
+#define VOL100_TOTAL_MS    (VOL100_BLINK_MS + VOL100_SOLID_MS + VOL100_FADE_MS)
 
 // ---- Battery saver ---------------------------------------------------------
 // With no turn/click, the ring eases to a dim glow, then blanks entirely so the
@@ -538,22 +538,22 @@ void renderPlayStateOver() {
   for (int i = 0; i < NUM_LEDS; i++) leds[i] = blend(leds[i], playColor, a);
 }
 
-// Volume hit 100%: hold full-bright green VOL100_SOLID_MS, blink 3x, fade to mode.
+// Volume hit 100%: blink green 3x, hold solid full-bright green VOL100_SOLID_MS,
+// then cross-fade back into the ring mode.
 void renderVol100() {
   uint32_t t = millis() - vol100Start;
   CRGB green = CRGB(0, 255, 0);
-  if (t < VOL100_SOLID_MS) {
-    FastLED.setBrightness(255);                          // full brightness
-    fill_solid(leds, NUM_LEDS, green);
-  } else if (t < VOL100_SOLID_MS + VOL100_BLINK_MS) {
+  if (t < VOL100_BLINK_MS) {                             // 1) blink 3 times
     FastLED.setBrightness(255);
-    uint32_t bt = t - VOL100_SOLID_MS;
-    bool on = ((bt / VOL100_BLINK_HALF) % 2) == 0;       // on,off,on,off,on
+    bool on = ((t / VOL100_BLINK_HALF) % 2) == 0;        // on,off,on,off,on
     fill_solid(leds, NUM_LEDS, on ? green : CRGB::Black);
-  } else {
+  } else if (t < VOL100_BLINK_MS + VOL100_SOLID_MS) {    // 2) hold solid green
+    FastLED.setBrightness(255);
+    fill_solid(leds, NUM_LEDS, green);
+  } else {                                               // 3) fade into the mode
     FastLED.setBrightness(cfg.brightness);
     renderMode();
-    uint32_t ft = t - VOL100_SOLID_MS - VOL100_BLINK_MS;
+    uint32_t ft = t - VOL100_BLINK_MS - VOL100_SOLID_MS;
     uint8_t a = (ft < VOL100_FADE_MS) ? (uint8_t)(255 - ft * 255 / VOL100_FADE_MS) : 0;
     for (int i = 0; i < NUM_LEDS; i++) leds[i] = blend(leds[i], green, a);
   }
