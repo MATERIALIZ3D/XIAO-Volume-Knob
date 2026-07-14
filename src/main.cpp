@@ -72,6 +72,11 @@ static const CRGB COLOR_MUTE   = CRGB(255, 0,   0);    // red (muted)
 #define FRAME_MS           4        // ~250 FPS render (smooth motion; dithering is off)
 #define PLAYSTATE_MS       3000     // play/pause indicator (teal/yellow) shows this long
 #define PLAYSTATE_FADE     900      // ...cross-fading back into the ring mode over this tail
+#define VOL100_SOLID_MS    10000    // volume-100 green holds full-bright this long
+#define VOL100_BLINK_HALF  180      // then blinks: on/off half-period
+#define VOL100_BLINK_MS    (VOL100_BLINK_HALF * 5)          // 3 green flashes (on,off,on,off,on)
+#define VOL100_FADE_MS     800      // then fades into the ring mode
+#define VOL100_TOTAL_MS    (VOL100_SOLID_MS + VOL100_BLINK_MS + VOL100_FADE_MS)
 
 // ---- Battery saver ---------------------------------------------------------
 // With no turn/click, the ring eases to a dim glow, then blanks entirely so the
@@ -169,6 +174,10 @@ CRGB     playColor      = CRGB::Black;
 uint8_t  lastPcPlaying  = 0xFF;     // last PC play state pushed by the app (0xFF = unknown)
 uint8_t  lastPcMuted    = 0xFF;     // last PC mute state
 
+uint8_t  volPct         = 0xFF;     // last volume % from the app (0xFF = unknown)
+uint32_t vol100Start    = 0;        // when the volume-100 green sequence began
+uint32_t vol100Until    = 0;        // ...and when it ends
+
 // ===========================================================================
 //  Runtime config  -  tunable over BLE by the companion app, saved to flash.
 // ===========================================================================
@@ -249,7 +258,10 @@ class PcStateCallbacks : public NimBLECharacteristicCallbacks {
   void onWrite(NimBLECharacteristic *c) override {
     std::string v = c->getValue();
     if (v.empty()) return;
-    uint8_t flags   = (uint8_t)v[0];
+    // Payload: [u8 volume 0-100][u8 flags]  (a legacy 1-byte payload = flags only).
+    uint8_t volume, flags;
+    if (v.size() >= 2) { volume = (uint8_t)v[0]; flags = (uint8_t)v[1]; }
+    else               { volume = 0xFF;          flags = (uint8_t)v[0]; }
     uint8_t muted   = flags & 0x01;
     uint8_t playing = (flags >> 1) & 0x01;
     uint8_t valid   = (flags >> 2) & 0x01;
@@ -260,9 +272,20 @@ class PcStateCallbacks : public NimBLECharacteristicCallbacks {
       playColor      = playing ? COLOR_PLAY : COLOR_PAUSE;
       playStateUntil = millis() + PLAYSTATE_MS;
       lastPcPlaying  = playing;
-      lastActivityMs = millis();                         // wake the ring to show it
+      lastActivityMs = millis();
     }
-    Serial.printf("PC state: muted=%u playing=%u valid=%u\n", muted, playing, valid);
+    if (volume != 0xFF) {                                // 0 = red (persistent), 100 = green burst
+      uint8_t prev = volPct;
+      volPct = volume;
+      if (volume != prev) lastActivityMs = millis();     // wake on any change
+      if (volume == 100 && prev != 100) {                // just hit max -> green sequence
+        vol100Start = millis();
+        vol100Until = vol100Start + VOL100_TOTAL_MS;
+      } else if (volume != 100) {
+        vol100Until = 0;                                 // leaving max cancels it
+      }
+    }
+    Serial.printf("PC state: vol=%u muted=%u playing=%u valid=%u\n", volume, muted, playing, valid);
   }
 };
 PcStateCallbacks pcStateCallbacks;
@@ -515,6 +538,27 @@ void renderPlayStateOver() {
   for (int i = 0; i < NUM_LEDS; i++) leds[i] = blend(leds[i], playColor, a);
 }
 
+// Volume hit 100%: hold full-bright green VOL100_SOLID_MS, blink 3x, fade to mode.
+void renderVol100() {
+  uint32_t t = millis() - vol100Start;
+  CRGB green = CRGB(0, 255, 0);
+  if (t < VOL100_SOLID_MS) {
+    FastLED.setBrightness(255);                          // full brightness
+    fill_solid(leds, NUM_LEDS, green);
+  } else if (t < VOL100_SOLID_MS + VOL100_BLINK_MS) {
+    FastLED.setBrightness(255);
+    uint32_t bt = t - VOL100_SOLID_MS;
+    bool on = ((bt / VOL100_BLINK_HALF) % 2) == 0;       // on,off,on,off,on
+    fill_solid(leds, NUM_LEDS, on ? green : CRGB::Black);
+  } else {
+    FastLED.setBrightness(cfg.brightness);
+    renderMode();
+    uint32_t ft = t - VOL100_SOLID_MS - VOL100_BLINK_MS;
+    uint8_t a = (ft < VOL100_FADE_MS) ? (uint8_t)(255 - ft * 255 / VOL100_FADE_MS) : 0;
+    for (int i = 0; i < NUM_LEDS; i++) leds[i] = blend(leds[i], green, a);
+  }
+}
+
 void renderBatteryGauge() {
   // Filled arc proportional to charge: green (>50%), amber (>20%), red otherwise.
   // Shown on demand when the button is held BATT_HOLD_MS — see handleButton().
@@ -595,10 +639,12 @@ void render() {
     renderWaiting();                             // breathing blue: waiting to pair
   } else if (now < flashUntil) {
     fill_solid(leds, NUM_LEDS, flashColor);      // cyan/purple flash on next/prev
+  } else if (isMuted || volPct == 0) {
+    fill_solid(leds, NUM_LEDS, COLOR_MUTE);      // muted or volume 0 -> persistent red
+  } else if (now < vol100Until) {
+    renderVol100();                               // volume 100% -> green, blink, fade
   } else if (now < playStateUntil) {
     renderPlayStateOver();                        // teal/yellow play-pause, fading to mode
-  } else if (isMuted) {
-    fill_solid(leds, NUM_LEDS, COLOR_MUTE);      // solid red while muted (synced from PC)
   } else {
     renderMode();                                // configurable idle look
   }
