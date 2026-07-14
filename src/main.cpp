@@ -59,6 +59,7 @@ static const CRGB COLOR_WAIT   = CRGB(0,   60,  255);  // blue (no BLE link)
 static const CRGB COLOR_NEXT   = CRGB(0,   120, 255);  // cyan flash
 static const CRGB COLOR_PREV   = CRGB(160, 0,   255);  // purple flash
 static const CRGB COLOR_MUTE   = CRGB(255, 0,   0);    // red (muted)
+static const CRGB COLOR_VOL    = CRGB(0,   220, 60);   // green (volume gauge)
 
 // ---------------------------------------------------------------------------
 //  Tuning
@@ -72,6 +73,8 @@ static const CRGB COLOR_MUTE   = CRGB(255, 0,   0);    // red (muted)
 #define FRAME_MS           4        // ~250 FPS render (smooth motion; dithering is off)
 #define PLAYSTATE_MS       3000     // play/pause indicator (teal/yellow) shows this long
 #define PLAYSTATE_FADE     900      // ...cross-fading back into the ring mode over this tail
+#define VOL_MS             2500     // green volume gauge shows this long after a change
+#define VOL_FADE           800      // ...then fades back into the ring mode
 
 // ---- Battery saver ---------------------------------------------------------
 // With no turn/click, the ring eases to a dim glow, then blanks entirely so the
@@ -169,6 +172,10 @@ CRGB     playColor      = CRGB::Black;
 uint8_t  lastPcPlaying  = 0xFF;     // last PC play state pushed by the app (0xFF = unknown)
 uint8_t  lastPcMuted    = 0xFF;     // last PC mute state
 
+uint32_t volStateUntil  = 0;        // green volume gauge until this time
+uint8_t  volPct         = 0;        // last volume % pushed by the app
+uint8_t  lastVolPct     = 0xFF;     // to detect a change (0xFF = unknown)
+
 // ===========================================================================
 //  Runtime config  -  tunable over BLE by the companion app, saved to flash.
 // ===========================================================================
@@ -249,7 +256,10 @@ class PcStateCallbacks : public NimBLECharacteristicCallbacks {
   void onWrite(NimBLECharacteristic *c) override {
     std::string v = c->getValue();
     if (v.empty()) return;
-    uint8_t flags   = (uint8_t)v[0];
+    // Payload: [u8 volume 0-100][u8 flags]  (a legacy 1-byte payload = flags only).
+    uint8_t volume, flags;
+    if (v.size() >= 2) { volume = (uint8_t)v[0]; flags = (uint8_t)v[1]; }
+    else               { volume = 0xFF;          flags = (uint8_t)v[0]; }  // 0xFF = no volume
     uint8_t muted   = flags & 0x01;
     uint8_t playing = (flags >> 1) & 0x01;
     uint8_t valid   = (flags >> 2) & 0x01;
@@ -262,7 +272,13 @@ class PcStateCallbacks : public NimBLECharacteristicCallbacks {
       lastPcPlaying  = playing;
       lastActivityMs = millis();                         // wake the ring to show it
     }
-    Serial.printf("PC state: muted=%u playing=%u valid=%u\n", muted, playing, valid);
+    if (volume != 0xFF && volume != lastVolPct) {        // volume changed (knob or PC) -> gauge
+      volPct         = volume;
+      lastVolPct     = volume;
+      volStateUntil  = millis() + VOL_MS;
+      lastActivityMs = millis();
+    }
+    Serial.printf("PC state: vol=%u muted=%u playing=%u valid=%u\n", volume, muted, playing, valid);
   }
 };
 PcStateCallbacks pcStateCallbacks;
@@ -485,9 +501,13 @@ void renderBreathe() {
   float rate  = 20000.0f / (cfg.breatheSpeed ? cfg.breatheSpeed : 1);  // bigger cfg = faster
   float phase = (1.0f - cosf(millis() / rate)) * 0.5f;
   float curve = phase * phase;
-  uint8_t scale = FLOOR + (uint8_t)(curve * (PEAK - FLOOR) + 0.5f);
+  uint16_t scale = FLOOR + (uint8_t)(curve * (PEAK - FLOOR) + 0.5f);
+  // encoder-click pop: briefly brighten toward full, same as rainbow/solid
+  uint32_t e = millis() - flickerStart;
+  if (e < FLICKER_MS) scale += (uint16_t)((uint32_t)(FLICKER_MS - e) * (255 - scale) / FLICKER_MS);
+  if (scale > 255) scale = 255;
   CRGB c = CRGB(cfg.r, cfg.g, cfg.b);
-  c.nscale8(scale);
+  c.nscale8((uint8_t)scale);
   fill_solid(leds, NUM_LEDS, c);
 }
 
@@ -509,6 +529,21 @@ void renderPlayStateOver() {
   uint8_t  a = 255;
   if (remain < PLAYSTATE_FADE) a = (uint8_t)((uint32_t)remain * 255 / PLAYSTATE_FADE);
   for (int i = 0; i < NUM_LEDS; i++) leds[i] = blend(leds[i], playColor, a);
+}
+
+// Volume gauge: lights the first N of 12 LEDs green in proportion to the PC volume
+// over the underlying mode, then cross-fades back into the mode. Fed by the app.
+void renderVolumeOver() {
+  renderMode();
+  uint32_t now    = millis();
+  uint32_t remain = (volStateUntil > now) ? (volStateUntil - now) : 0;
+  uint8_t  a = 255;
+  if (remain < VOL_FADE) a = (uint8_t)((uint32_t)remain * 255 / VOL_FADE);
+  int lit = (volPct * NUM_LEDS + 50) / 100;             // 0..NUM_LEDS, rounded
+  for (int i = 0; i < NUM_LEDS; i++) {
+    CRGB overlay = (i < lit) ? COLOR_VOL : CRGB::Black;  // green arc, rest dark
+    leds[i] = blend(leds[i], overlay, a);
+  }
 }
 
 void renderBatteryGauge() {
@@ -591,6 +626,8 @@ void render() {
     renderWaiting();                             // breathing blue: waiting to pair
   } else if (now < flashUntil) {
     fill_solid(leds, NUM_LEDS, flashColor);      // cyan/purple flash on next/prev
+  } else if (now < volStateUntil) {
+    renderVolumeOver();                           // green volume gauge, fading to mode
   } else if (now < playStateUntil) {
     renderPlayStateOver();                        // teal/yellow play-pause, fading to mode
   } else if (isMuted) {
