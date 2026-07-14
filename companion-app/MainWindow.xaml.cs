@@ -78,7 +78,6 @@ namespace KnobConfig
         System.Windows.Threading.DispatcherTimer? _pollTimer;
         bool _suppressVol;
         bool _pcMuted, _pcPlaying, _pcHasSession;
-        int _pcVolume;
 
         // tray / lifecycle
         System.Windows.Forms.NotifyIcon? _tray;
@@ -305,7 +304,6 @@ namespace KnobConfig
             MuteBtn.IsChecked = muted;
             MuteBtn.Content = muted ? "🔇" : "🔊";   // 🔇 / 🔊
             _pcMuted = muted;
-            _pcVolume = vol;
             PushPcState();
         }
 
@@ -319,11 +317,10 @@ namespace KnobConfig
         {
             var ch = _pcStateChar;
             if (ch == null) return;
-            byte vol = (byte)Math.Max(0, Math.Min(100, _pcVolume));
             byte flags = (byte)((_pcMuted ? 1 : 0) | (_pcPlaying ? 2 : 0) | (_pcHasSession ? 4 : 0));
             try
             {
-                var buf = CryptographicBuffer.CreateFromByteArray(new byte[] { vol, flags });
+                var buf = CryptographicBuffer.CreateFromByteArray(new byte[] { flags });
                 await ch.WriteValueWithResultAsync(buf, GattWriteOption.WriteWithoutResponse);
             }
             catch (Exception ex) { Log("pcstate write: " + ex.Message); }
@@ -627,7 +624,7 @@ namespace KnobConfig
                 }
 
                 // push the current PC audio/media state so the ring syncs immediately
-                if (_audio != null) { var a = _audio.Get(); _pcMuted = a.muted; _pcVolume = a.vol; }
+                if (_audio != null) { var a = _audio.Get(); _pcMuted = a.muted; }
                 if (_media != null) { var m = _media.Get(); _pcPlaying = m.playing; _pcHasSession = m.has; }
                 PushPcState();
 
