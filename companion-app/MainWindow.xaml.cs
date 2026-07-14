@@ -194,14 +194,7 @@ namespace KnobConfig
         void SetupTray()
         {
             _tray = new System.Windows.Forms.NotifyIcon { Text = "Volume Knob", Visible = true };
-            try
-            {
-                var ico = System.IO.Path.Combine(AppContext.BaseDirectory, "knob.ico");
-                _tray.Icon = System.IO.File.Exists(ico)
-                    ? new System.Drawing.Icon(ico)
-                    : System.Drawing.SystemIcons.Application;
-            }
-            catch { _tray.Icon = System.Drawing.SystemIcons.Application; }
+            _tray.Icon = LoadTrayIcon();
             _tray.DoubleClick += (_, __) => ShowFromTray();
 
             var menu = new System.Windows.Forms.ContextMenuStrip();
@@ -217,6 +210,29 @@ namespace KnobConfig
             menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
             menu.Items.Add(exit);
             _tray.ContextMenuStrip = menu;
+        }
+
+        // The knob.ico is embedded as a WPF Resource (not a loose file), so load the
+        // 16px tray icon from that resource; fall back to the exe's own icon.
+        static System.Drawing.Icon LoadTrayIcon()
+        {
+            try
+            {
+                var info = System.Windows.Application.GetResourceStream(new Uri("knob.ico", UriKind.Relative));
+                if (info != null) return new System.Drawing.Icon(info.Stream, new System.Drawing.Size(16, 16));
+            }
+            catch { }
+            try
+            {
+                var exe = ExePath();
+                if (!string.IsNullOrEmpty(exe))
+                {
+                    var ic = System.Drawing.Icon.ExtractAssociatedIcon(exe);
+                    if (ic != null) return ic;
+                }
+            }
+            catch { }
+            return System.Drawing.SystemIcons.Application;
         }
 
         void ExitApp()
