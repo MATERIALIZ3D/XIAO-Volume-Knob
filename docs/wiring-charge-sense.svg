@@ -1,0 +1,101 @@
+<svg viewBox="0 0 960 560" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" role="img" aria-labelledby="t d">
+  <title id="t">XIAO ESP32-C3 — USB / charge sense divider</title>
+  <desc id="d">A 100k/100k voltage divider from the 5V pin to GND, midpoint tapped to D2/GPIO4, to sense whether USB is plugged in (charging).</desc>
+
+  <rect x="0" y="0" width="960" height="560" fill="#f7f8fa"/>
+  <text x="40" y="46" font-size="25" font-weight="700" fill="#1b2733">Charge / USB-present sense &#8212; 5V divider to D2 (GPIO4)</text>
+  <text x="40" y="72" font-size="14.5" fill="#5a6672">Same idea as the battery divider: two 100 k&#8486; resistors, midpoint read by an ADC pin.</text>
+
+  <!-- ============ small board graphic (where the pins are) ============ -->
+  <g>
+    <rect x="70" y="150" width="130" height="300" rx="10" fill="#20303d" stroke="#0e1a22" stroke-width="2"/>
+    <rect x="112" y="134" width="46" height="20" rx="6" fill="#c7ccd1" stroke="#8b9299" stroke-width="1.5"/>
+    <text x="135" y="148" font-size="9" fill="#3a4148" text-anchor="middle" font-weight="600">USB-C</text>
+    <text x="135" y="410" font-size="11" fill="#9fb0bd" text-anchor="middle" font-weight="600">XIAO</text>
+    <text x="135" y="424" font-size="11" fill="#9fb0bd" text-anchor="middle" font-weight="600">ESP32-C3</text>
+
+    <!-- left pads: D0..D6 -->
+    <g font-size="10.5" font-weight="600" text-anchor="start" fill="#cfd8df">
+      <rect x="58" y="176" width="12" height="10" fill="#e6b800"/><text x="80" y="185">D0</text>
+      <rect x="58" y="206" width="12" height="10" fill="#e6b800"/><text x="80" y="215">D1</text>
+      <rect x="58" y="236" width="12" height="10" fill="#f59f00"/><text x="80" y="245" fill="#ffcf80" font-weight="700">D2</text>
+      <rect x="58" y="266" width="12" height="10" fill="#e6b800"/><text x="80" y="275">D3</text>
+      <rect x="58" y="296" width="12" height="10" fill="#e6b800"/><text x="80" y="305">D4</text>
+      <rect x="58" y="326" width="12" height="10" fill="#e6b800"/><text x="80" y="335">D5</text>
+      <rect x="58" y="356" width="12" height="10" fill="#e6b800"/><text x="80" y="365">D6</text>
+    </g>
+    <text x="80" y="257" font-size="8.5" fill="#8a929a">GPIO4</text>
+    <!-- right pads: 5V GND 3V3 ... -->
+    <g font-size="10.5" font-weight="600" text-anchor="end" fill="#cfd8df">
+      <rect x="200" y="176" width="12" height="10" fill="#e6b800"/><text x="196" y="185" fill="#ff9b9b" font-weight="700">5V</text>
+      <rect x="200" y="206" width="12" height="10" fill="#e6b800"/><text x="196" y="215" font-weight="700">GND</text>
+      <rect x="200" y="236" width="12" height="10" fill="#e6b800"/><text x="196" y="245">3V3</text>
+      <rect x="200" y="266" width="12" height="10" fill="#e6b800"/><text x="196" y="275">D10</text>
+      <rect x="200" y="296" width="12" height="10" fill="#e6b800"/><text x="196" y="305">D9</text>
+      <rect x="200" y="326" width="12" height="10" fill="#e6b800"/><text x="196" y="335">D8</text>
+      <rect x="200" y="356" width="12" height="10" fill="#e6b800"/><text x="196" y="365">D7</text>
+    </g>
+    <!-- highlight dots -->
+    <circle cx="64" cy="241" r="7" fill="none" stroke="#f59f00" stroke-width="2.5"/>
+    <circle cx="206" cy="181" r="7" fill="none" stroke="#e03131" stroke-width="2.5"/>
+    <circle cx="206" cy="211" r="7" fill="none" stroke="#e9ecef" stroke-width="2.5"/>
+    <text x="135" y="475" font-size="10.5" fill="#5a6672" text-anchor="middle">the 3 pins you use (5V &amp; GND right, D2 left)</text>
+  </g>
+
+  <!-- ============ the divider schematic ============ -->
+  <g font-size="13">
+    <!-- terminals -->
+    <circle cx="330" cy="200" r="6" fill="#e03131"/>
+    <text x="330" y="182" text-anchor="middle" font-weight="700" fill="#e03131">5V pin</text>
+    <circle cx="770" cy="200" r="6" fill="#212529"/>
+    <text x="770" y="182" text-anchor="middle" font-weight="700" fill="#33404a">GND pin</text>
+
+    <!-- 5V wire to R1 -->
+    <line x1="330" y1="200" x2="392" y2="200" stroke="#e03131" stroke-width="4"/>
+    <!-- R1 -->
+    <polyline points="392,200 400,188 416,212 432,188 448,212 464,188 480,212 496,188 512,200"
+              fill="none" stroke="#495057" stroke-width="4" stroke-linejoin="round"/>
+    <text x="452" y="168" text-anchor="middle" font-size="12.5" fill="#33404a" font-weight="600">R1 &#183; 100 k&#8486;</text>
+    <!-- junction segment -->
+    <line x1="512" y1="200" x2="588" y2="200" stroke="#343a40" stroke-width="4"/>
+    <circle cx="550" cy="200" r="6" fill="#f59f00"/>
+    <!-- R2 -->
+    <polyline points="588,200 596,188 612,212 628,188 644,212 660,188 676,212 692,188 708,200"
+              fill="none" stroke="#495057" stroke-width="4" stroke-linejoin="round"/>
+    <text x="648" y="168" text-anchor="middle" font-size="12.5" fill="#33404a" font-weight="600">R2 &#183; 100 k&#8486;</text>
+    <!-- R2 to GND -->
+    <line x1="708" y1="200" x2="770" y2="200" stroke="#212529" stroke-width="4"/>
+
+    <!-- tap to D2 -->
+    <line x1="550" y1="200" x2="550" y2="330" stroke="#f59f00" stroke-width="4"/>
+    <circle cx="550" cy="330" r="6" fill="#f59f00"/>
+    <text x="566" y="335" font-size="13" font-weight="700" fill="#b5730a">&#8594; D2 / GPIO4 (ADC)</text>
+
+    <!-- voltage annotations -->
+    <text x="330" y="230" text-anchor="middle" font-size="11.5" fill="#5a6672">5 V on USB</text>
+    <text x="330" y="246" text-anchor="middle" font-size="11.5" fill="#5a6672">0 V on battery</text>
+    <text x="550" y="365" text-anchor="middle" font-size="11.5" fill="#5a6672">&#8776; 2.5 V on USB &#183; 0 V on battery</text>
+  </g>
+
+  <!-- ============ note box ============ -->
+  <g>
+    <rect x="40" y="410" width="290" height="120" rx="12" fill="#ffffff" stroke="#dde3e8" stroke-width="1.5"/>
+    <text x="60" y="436" font-size="14" font-weight="700" fill="#1b2733">How to wire it</text>
+    <g font-size="12" fill="#33404a">
+      <text x="60" y="459">1. R1 (100 k&#8486;): from the <tspan fill="#e03131" font-weight="700">5V</tspan> pin to the junction.</text>
+      <text x="60" y="479">2. R2 (100 k&#8486;): from the junction to <tspan font-weight="700">GND</tspan>.</text>
+      <text x="60" y="499">3. A wire from the junction to <tspan fill="#b5730a" font-weight="700">D2 / GPIO4</tspan>.</text>
+      <text x="60" y="519" fill="#5a6672" font-size="11">Twist the two resistors' legs together for the junction.</text>
+    </g>
+  </g>
+  <g>
+    <rect x="350" y="410" width="570" height="120" rx="12" fill="#ffffff" stroke="#dde3e8" stroke-width="1.5"/>
+    <text x="372" y="436" font-size="14" font-weight="700" fill="#1b2733">What it does &amp; next step</text>
+    <g font-size="12" fill="#33404a">
+      <text x="372" y="459">USB plugged in &#8594; 5V pin is ~5 V &#8594; D2 reads ~2.5 V &#8594; firmware knows <tspan font-weight="700">USB present</tspan>.</text>
+      <text x="372" y="479">On battery &#8594; 5V pin is 0 V &#8594; D2 reads ~0 V &#8594; <tspan font-weight="700">on battery</tspan>.</text>
+      <text x="372" y="499">Charging = USB present <tspan font-style="italic">and</tspan> battery not full; charged = USB present <tspan font-style="italic">and</tspan> ~100%.</text>
+      <text x="372" y="521" fill="#5a6672" font-size="11">Firmware: analogRead on D2/GPIO4 (threshold ~1.5 V); app shows a &#9889; Charging badge. I'll add both once it's wired.</text>
+    </g>
+  </g>
+</svg>

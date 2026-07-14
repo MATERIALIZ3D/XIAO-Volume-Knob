@@ -45,6 +45,7 @@
 #define PIN_ENC_SW  21   // XIAO D6  - encoder push switch (to GND)
 #define PIN_LED     10   // XIAO D10 - WS2812 data in
 #define PIN_VBAT    3    // XIAO D1  - battery sense (BAT+ via 100k/100k divider, ADC1)
+#define PIN_VUSB    4    // XIAO D2  - USB/charge sense (5V via 100k/100k divider, ADC1)
 
 // ---------------------------------------------------------------------------
 //  LED ring config
@@ -101,6 +102,7 @@ static const CRGB COLOR_MUTE   = CRGB(255, 0,   0);    // red (muted)
 #define VBAT_READ_MS    5000        // sample interval (battery moves slowly)
 #define LOW_BATT_MV     3500        // below this -> red low-battery pulse
 #define CRIT_BATT_MV    3350        // below this -> faster (more urgent) pulse
+#define VUSB_PRESENT_MV 1500        // divided 5V reads ~2.5V on USB; above this = plugged in
 
 // ---- Battery gauge on demand + rainbow idle look ---------------------------
 #define BATT_HOLD_MS       5000     // hold the button this long -> show battery gauge
@@ -169,6 +171,8 @@ uint8_t  idleScale      = 255;      // eased 0-255 master dim applied when idle
 uint16_t batteryMv   = 0;           // last battery reading, mV (0 = not yet read)
 uint8_t  batteryPct  = 0;           // rough state-of-charge, %
 uint32_t lastBattMs  = 0;           // last battery sample time
+uint16_t vusbMv      = 0;           // divided 5V-pin reading (USB/charge sense)
+bool     usbPresent  = false;       // true when USB is plugged in
 uint32_t batteryShowUntil = 0;      // ring shows the battery gauge until this time
 
 uint32_t playStateUntil = 0;        // teal/yellow play-pause indicator until this time
@@ -312,9 +316,11 @@ void setupConfigService() {
 
 void notifyStatus() {
   if (!statusChar) return;
+  uint8_t flags = 0;
+  if (batteryMv > 2500 && batteryMv < cfg.lowBattMv) flags |= 0x01;   // bit0: low battery
+  if (usbPresent)                                    flags |= 0x02;   // bit1: USB present
   uint8_t buf[4] = {
-    (uint8_t)(batteryMv & 0xFF), (uint8_t)(batteryMv >> 8), batteryPct,
-    (uint8_t)((batteryMv > 2500 && batteryMv < cfg.lowBattMv) ? 0x01 : 0x00)
+    (uint8_t)(batteryMv & 0xFF), (uint8_t)(batteryMv >> 8), batteryPct, flags
   };
   statusChar->setValue(buf, sizeof(buf));
   statusChar->notify();
@@ -358,6 +364,14 @@ void readBattery() {
   uint32_t adcMv = sum / VBAT_SAMPLES;
   batteryMv  = (uint16_t)(adcMv * VBAT_DIVIDER * VBAT_CAL);
   batteryPct = vbatToPercent(batteryMv);
+}
+
+// Read the 5V-pin divider: ~2.5 V => USB plugged in, ~0 V => on battery.
+void readUsb() {
+  uint32_t sum = 0;
+  for (int i = 0; i < 8; i++) sum += analogReadMilliVolts(PIN_VUSB);
+  vusbMv     = sum / 8;
+  usbPresent = vusbMv > VUSB_PRESENT_MV;
 }
 
 // Ask the host for a fast connection interval (7.5-15 ms). The default BLE
@@ -705,8 +719,9 @@ void setup() {
   pinMode(PIN_ENC_B, INPUT_PULLUP);
   pinMode(PIN_ENC_SW, INPUT_PULLUP);
 
-  // Battery sense: 11 dB attenuation covers the divided range (~2.1 V at 4.2 V).
+  // Battery + USB sense: 11 dB attenuation covers the divided ranges.
   analogSetPinAttenuation(PIN_VBAT, ADC_11db);
+  analogSetPinAttenuation(PIN_VUSB, ADC_11db);
 
   // Seed the decoder with the current pin state, then watch both phases.
   encState = ttable[R_START][(digitalRead(PIN_ENC_B) << 1) | digitalRead(PIN_ENC_A)];
@@ -759,7 +774,9 @@ void setup() {
 #endif
   lastActivityMs = millis(); // start the idle timer fresh (ring stays lit after boot)
   readBattery();             // seed a first reading so the % is valid immediately
-  Serial.printf("Battery at boot: %u mV (%u%%)\n", batteryMv, batteryPct);
+  readUsb();
+  Serial.printf("Battery at boot: %u mV (%u%%)  VUSB: %u mV (usb=%d)\n",
+                batteryMv, batteryPct, vusbMv, usbPresent);
   Serial.println("Advertising BLE as 'Eugene's Knob' - pair from your PC.");
 }
 
@@ -784,7 +801,9 @@ void loop() {
   if (now - lastBattMs >= VBAT_READ_MS) {
     lastBattMs = now;
     readBattery();
-    Serial.printf("Battery: %u mV (%u%%)\n", batteryMv, batteryPct);
+    readUsb();
+    Serial.printf("Battery: %u mV (%u%%)  VUSB: %u mV (usb=%d)\n",
+                  batteryMv, batteryPct, vusbMv, usbPresent);
 #if defined(USE_NIMBLE)
     notifyStatus();   // push the fresh reading to the companion app
 #endif

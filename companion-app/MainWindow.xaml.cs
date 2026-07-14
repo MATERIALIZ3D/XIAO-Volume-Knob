@@ -79,6 +79,7 @@ namespace KnobConfig
         bool _suppressVol;
         bool _pcMuted, _pcPlaying, _pcHasSession;
         int _pcVolume;
+        bool _linkUp;   // BLE link currently up? (gates the heartbeat writes)
 
         // tray / lifecycle
         System.Windows.Forms.NotifyIcon? _tray;
@@ -318,7 +319,7 @@ namespace KnobConfig
         async void PushPcState()
         {
             var ch = _pcStateChar;
-            if (ch == null) return;
+            if (ch == null || !_linkUp) return;
             byte vol = (byte)Math.Max(0, Math.Min(100, _pcVolume));
             byte flags = (byte)((_pcMuted ? 1 : 0) | (_pcPlaying ? 2 : 0) | (_pcHasSession ? 4 : 0));
             try
@@ -326,7 +327,7 @@ namespace KnobConfig
                 var buf = CryptographicBuffer.CreateFromByteArray(new byte[] { vol, flags });
                 await ch.WriteValueWithResultAsync(buf, GattWriteOption.WriteWithoutResponse);
             }
-            catch (Exception ex) { Log("pcstate write: " + ex.Message); }
+            catch (Exception ex) { _pcStateChar = null; Log("pcstate write dropped: " + ex.Message); }
         }
 
         // dark title bar
@@ -478,15 +479,17 @@ namespace KnobConfig
             BattFill.Width = (double.IsNaN(w) || w < 0) ? 0 : w;
         }
 
-        void ShowBattery(ushort mv, byte pct)
+        void ShowBattery(ushort mv, byte pct, bool usb)
         {
             _lastMv = mv; _lastPct = pct;
             ApplyBatteryWidth();
             BattFill.Background = new SolidColorBrush(
-                pct > 50 ? Color.FromRgb(0x2E, 0xCE, 0x8A) :
-                pct > 20 ? Color.FromRgb(0xF0, 0xA8, 0x2A) :
-                           Color.FromRgb(0xE0, 0x55, 0x55));
-            BattText.Text = $"{pct}%     {mv / 1000.0:0.00} V";
+                usb        ? Color.FromRgb(0x39, 0xB8, 0xE8) :   // blue while on USB
+                pct > 50   ? Color.FromRgb(0x2E, 0xCE, 0x8A) :
+                pct > 20   ? Color.FromRgb(0xF0, 0xA8, 0x2A) :
+                             Color.FromRgb(0xE0, 0x55, 0x55));
+            string tag = !usb ? "" : (pct >= 98 ? "      ⚡ Full" : "      ⚡ Charging");
+            BattText.Text = $"{pct}%     {mv / 1000.0:0.00} V{tag}";
         }
 
         void SetStatus(string s, Color c)
@@ -623,12 +626,15 @@ namespace KnobConfig
                 if (sd.Status == GattCommunicationStatus.Success)
                 {
                     CryptographicBuffer.CopyToByteArray(sd.Value, out var sb);
-                    if (sb.Length >= 3) ShowBattery((ushort)(sb[0] | (sb[1] << 8)), sb[2]);
+                    if (sb.Length >= 3)
+                        ShowBattery((ushort)(sb[0] | (sb[1] << 8)), sb[2],
+                                    sb.Length >= 4 && (sb[3] & 0x02) != 0);
                 }
 
                 // push the current PC audio/media state so the ring syncs immediately
                 if (_audio != null) { var a = _audio.Get(); _pcMuted = a.muted; _pcVolume = a.vol; }
                 if (_media != null) { var m = _media.Get(); _pcPlaying = m.playing; _pcHasSession = m.has; }
+                _linkUp = true;
                 PushPcState();
 
                 SetStatus("Connected", CGood);
@@ -646,6 +652,8 @@ namespace KnobConfig
         void OnConnectionChanged(BluetoothLEDevice sender, object args)
         {
             var connected = sender.ConnectionStatus == BluetoothConnectionStatus.Connected;
+            _linkUp = connected;
+            if (!connected) _pcStateChar = null;   // stop the heartbeat writing to a dead link
             Dispatcher.BeginInvoke(new Action(() =>
                 SetStatus(connected ? "Connected" : "Link dropped — click Reconnect",
                           connected ? CGood : CWarn)));
@@ -660,7 +668,8 @@ namespace KnobConfig
             {
                 ushort mv = (ushort)(data[0] | (data[1] << 8));
                 byte pct = data[2];
-                Dispatcher.BeginInvoke(new Action(() => ShowBattery(mv, pct)));
+                bool usb = data.Length >= 4 && (data[3] & 0x02) != 0;
+                Dispatcher.BeginInvoke(new Action(() => ShowBattery(mv, pct, usb)));
             }
         }
 
