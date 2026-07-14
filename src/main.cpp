@@ -12,6 +12,7 @@
 //    - Short tap         -> play / pause  (2 taps = next, 3 = previous)
 //    - Medium hold       -> mute toggle (committed on release, ~0.6-5 s)
 //    - Long hold (5 s)   -> show battery gauge on the ring (does NOT mute)
+//    - Very long (8 s)   -> pairing mode: clear pairings + re-advertise (magenta blink)
 //    - LED ring          -> slow rainbow cycle while connected (no state colour:
 //                           HID is one-way so play/pause can't be tracked)
 //                           solid red while muted
@@ -104,6 +105,7 @@ static const CRGB COLOR_MUTE   = CRGB(255, 0,   0);    // red (muted)
 // ---- Battery gauge on demand + rainbow idle look ---------------------------
 #define BATT_HOLD_MS       5000     // hold the button this long -> show battery gauge
 #define BATT_LINGER_MS     4000     // keep the gauge up this long after release
+#define PAIR_HOLD_MS       8000     // hold this long -> clear pairings & enter pairing mode
 #define RAINBOW_SPREAD     16       // hue step between adjacent LEDs (ring gradient)
 #define RAINBOW_MS_PER_HUE 26       // ms per hue advance (higher = slower cycle)
 
@@ -370,6 +372,25 @@ void requestFastConnParams() {
     Serial.println("Requested fast connection interval");
   }
 }
+
+// Pairing mode: forget all bonds and re-advertise so the knob can be paired fresh
+// (to this or another PC). The current central is disconnected; the host must then
+// "Remove device" + "Add device" again. Triggered by an 8 s button hold.
+void enterPairingMode() {
+  Serial.println("Pairing mode: clearing bonds and re-advertising");
+  // magenta triple-blink so the long hold is acknowledged
+  for (int k = 0; k < 3; k++) {
+    FastLED.setBrightness(140);
+    fill_solid(leds, NUM_LEDS, CRGB(255, 0, 255)); FastLED.show(); delay(130);
+    fill_solid(leds, NUM_LEDS, CRGB::Black);        FastLED.show(); delay(130);
+  }
+  NimBLEServer *srv = NimBLEDevice::getServer();
+  if (srv && srv->getConnectedCount() > 0) {
+    srv->disconnect(srv->getPeerInfo(0).getConnHandle());
+  }
+  NimBLEDevice::deleteAllBonds();
+  NimBLEDevice::startAdvertising();
+}
 #endif
 
 // ===========================================================================
@@ -405,6 +426,7 @@ void handleButton() {
   static uint32_t lastClickMs  = 0;
   static uint32_t pressStartMs = 0;
   static bool     battArmed    = false;  // this hold has reached the battery-gauge threshold
+  static bool     pairArmed    = false;  // ...and the pairing-mode threshold
 
   uint32_t now = millis();
   bool raw = digitalRead(PIN_ENC_SW);
@@ -420,6 +442,7 @@ void handleButton() {
       noteActivity();                    // wake the ring out of any idle dim/blank
       pressStartMs = now;
       battArmed    = false;
+      pairArmed    = false;
     } else {                             // released -> decide the gesture by hold length
       uint32_t held = now - pressStartMs;
       if (battArmed) {
@@ -445,6 +468,15 @@ void handleButton() {
     }
     batteryShowUntil = now + BATT_LINGER_MS;
     noteActivity();                      // keep the ring awake through the hold
+  }
+
+  // Keep holding past PAIR_HOLD_MS -> clear pairings and enter pairing mode.
+  if (lastStable == LOW && !pairArmed && (now - pressStartMs) >= PAIR_HOLD_MS) {
+    pairArmed = true;
+    batteryShowUntil = 0;                // cancel the battery gauge
+#if defined(USE_NIMBLE)
+    enterPairingMode();
+#endif
   }
 
   // Dispatch the transport action once the multi-click window closes.
